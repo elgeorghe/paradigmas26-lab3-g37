@@ -43,3 +43,7 @@ bin/
 # general
 *.class
 *.identifier
+*Zone.Identifier
+
+# python virtual environment
+venv/
