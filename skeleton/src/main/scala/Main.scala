@@ -1,3 +1,5 @@
+import org.apache.spark.sql.SparkSession
+
 object Main {
   def main(args: Array[String]): Unit = {
     // Parse command-line arguments
@@ -7,70 +9,101 @@ object Main {
     }
 
     // Load subscriptions
-    val subscriptionOpts = FileIO.readSubscriptions(cmdArgs.subscriptionFile)
-
-    // Filter out malformed subscriptions (None values)
-    val subscriptions = subscriptionOpts.flatten
-
-    // Download feeds and parse posts, tracking success/failure
-    val downloadResults = subscriptions.map { subscription =>
-      val feedOpt = FileIO.downloadFeed(subscription.url)
-      val posts = feedOpt.fold(List[Post]())(JsonParser.parsePosts(_, subscription.name))
-      (feedOpt.isDefined, posts)
+    val subscriptionResult = FileIO.readSubscriptions(cmdArgs.subscriptionFile)
+    val subscriptions = subscriptionResult match {
+      case Left(errorMessage) =>
+        println(errorMessage)
+        return
+      case Right(list) =>
+        list
     }
 
-    // Count feed successes/failures
-    val feedsSuccess = downloadResults.count(_._1)
-    val feedsFailed = downloadResults.length - feedsSuccess
-
-    // Flatten all posts and count JSON parse failures
-    val allPosts = downloadResults.flatMap(_._2)
-    val postsSuccess = allPosts.length
-    val postsFailed = downloadResults.count(_._2.isEmpty)
-
-    // Filter empty posts
-    val filteredPosts = Analyzer.filterEmptyPosts(allPosts)
-    val postsFiltered = allPosts.length - filteredPosts.length
-
-    // Calculate average characters in filtered posts
-    val totalChars = filteredPosts.map(post => post.title.length + post.selftext.length).sum
-    val avgChars = if (filteredPosts.nonEmpty) totalChars / filteredPosts.length else 0
-
-    // Prepare statistics
-    val stats = Map(
-      "feedsSuccess" -> feedsSuccess,
-      "feedsFailed" -> feedsFailed,
-      "postsSuccess" -> postsSuccess,
-      "postsFailed" -> postsFailed,
-      "postsFiltered" -> postsFiltered,
-      "avgChars" -> avgChars
-    )
-
-    // Print output
-    println(Formatters.formatProcessingStats(stats))
-    println()
-
-    // Check if we have any posts to process
-    if (filteredPosts.isEmpty) {
-      println("Error: No valid posts downloaded after filtering")
+    if (subscriptions.isEmpty) {
+      println("Error: No valid subscriptions found")
       return
     }
 
-    // Load dictionaries
-    val dictionary = Dictionary.loadAll(cmdArgs.entitiesDir)
+    // Spark setup and subscription RDD
+    val spark = SparkSession.builder()
+      .appName("RedditNER")
+      .master("local[*]")
+      .getOrCreate()
 
-    // Detect entities in all posts (combine title and selftext)
-    val allEntities = filteredPosts.flatMap { post =>
-      val combinedText = post.title + " " + post.selftext
-      Analyzer.detectEntities(combinedText, dictionary)
+    case class FeedResult(success: Boolean, posts: List[Post], filteredPosts: List[Post])
+
+    try {
+      val sc = spark.sparkContext
+      val subscriptionRdd = sc.parallelize(subscriptions)
+
+      val feedResults = subscriptionRdd.map { subscription =>
+        FileIO.downloadFeed(subscription.url) match {
+          case Some(feedJson) =>
+            try {
+              val posts = JsonParser.parsePosts(feedJson, subscription.name)
+              val filteredPosts = Analyzer.filterEmptyPosts(posts)
+              FeedResult(success = true, posts = posts, filteredPosts = filteredPosts)
+            } catch {
+              case _: Exception =>
+                println(s"Warning: Failed to parse posts from '${subscription.name}' (${subscription.url})")
+                FeedResult(success = true, posts = List.empty, filteredPosts = List.empty)
+            }
+          case None =>
+            println(s"Warning: Failed to download from '${subscription.name}' (${subscription.url})")
+            FeedResult(success = false, posts = List.empty, filteredPosts = List.empty)
+        }
+      }.cache()
+
+      val collectedFeedResults = feedResults.collect().toList
+      val allPosts = collectedFeedResults.flatMap(_.posts)
+      val filteredPosts = collectedFeedResults.flatMap(_.filteredPosts)
+
+      val feedsSuccess = collectedFeedResults.count(_.success)
+      val feedsFailed = collectedFeedResults.count(!_.success)
+      val postsSuccess = allPosts.length
+      val postsFailed = collectedFeedResults.count(_.posts.isEmpty)
+      val filteredPostsCount = filteredPosts.length
+      val postsFiltered = postsSuccess - filteredPostsCount
+      val totalChars = filteredPosts.map(post => post.title.length + post.selftext.length).sum
+      val avgChars = if (filteredPostsCount > 0) totalChars / filteredPostsCount else 0
+
+      val stats = Map(
+        "feedsSuccess" -> feedsSuccess,
+        "feedsFailed" -> feedsFailed,
+        "postsSuccess" -> postsSuccess,
+        "postsFailed" -> postsFailed,
+        "postsFiltered" -> postsFiltered,
+        "avgChars" -> avgChars
+      )
+
+      println(Formatters.formatProcessingStats(stats))
+      println()
+
+      if (filteredPostsCount == 0) {
+        println("Error: No valid posts downloaded after filtering")
+        return
+      }
+
+      val filteredPostsList = filteredPosts
+
+      // Load dictionaries
+      val dictionary = Dictionary.loadAll(cmdArgs.entitiesDir)
+
+      // Detect entities in all posts (combine title and selftext)
+      val allEntities = filteredPostsList.flatMap { post =>
+        val combinedText = post.title + " " + post.selftext
+        Analyzer.detectEntities(combinedText, dictionary)
+      }
+
+      // Count entities
+      val entityCounts = Analyzer.countEntities(allEntities)
+      val typeStats = Analyzer.countByType(allEntities)
+
+      println(Formatters.formatTypeStats(typeStats))
+      println()
+      println(Formatters.formatEntityStats(entityCounts, cmdArgs.topK))
+    } finally {
+      spark.stop()
     }
-
-    // Count entities
-    val entityCounts = Analyzer.countEntities(allEntities)
-    val typeStats = Analyzer.countByType(allEntities)
-
-    println(Formatters.formatTypeStats(typeStats))
-    println()
-    println(Formatters.formatEntityStats(entityCounts, cmdArgs.topK))
   }
 }
+

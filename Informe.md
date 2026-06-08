@@ -122,3 +122,7 @@ los mejores.
 
 Spark impone que las funciones sean serializables, sin estado compartido mutable, y con pocos o
 ningún efectos secundarios, mientras esto se respete, los workers funcionaran.
+
+# Ejercicio 2
+
+Si dejamos que la excepción se propague desde dentro de un flatMap el fallo puede detener el procesamiento de todo el job en vez de sólo esa entrada
