@@ -126,3 +126,11 @@ ningún efectos secundarios, mientras esto se respete, los workers funcionaran.
 # Ejercicio 2
 
 Si dejamos que la excepción se propague desde dentro de un flatMap el fallo puede detener el procesamiento de todo el job en vez de sólo esa entrada
+
+# ejercicio 3
+
+- reduceByKey es una barrera de sincronización. ¿Qué ocurre en el cluster en ese punto? ¿Por qué es inevitable para este problema?
+Cuando se invoca un reduceByKey, el clúster ejecuta una serie de pasos coreografiados que dividen el plan de ejecución en dos etapas, en la frontera entre estas dos etapas se encuentra la barrera de sincronización. Y es inevitable debido a la necesidad de pasar de un estado local a uno global
+
+- ¿Qué restricciones debe cumplir la función que se le pasa a reduceByKey? Piensen en conmutatividad y asociatividad.
+debe cumplir asociatividad y conmutatividad ya que si la función no cumple con ambas, el resultado del cómputo distribuido será incorrecto o no determinístico
