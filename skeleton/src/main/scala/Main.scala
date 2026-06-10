@@ -1,21 +1,7 @@
 import org.apache.spark.sql.SparkSession
-import org.apache.logging.log4j.{Level, LogManager}
-import org.apache.logging.log4j.core.config.Configurator
-
-
 
 object Main {
   def main(args: Array[String]): Unit = {
-    Configurator.setRootLevel(Level.ERROR)
-
-    val spark = SparkSession.builder()
-      .appName("RedditNER")
-      .master("local[*]")
-      .config("spark.ui.showConsoleProgress", "false")
-      .getOrCreate()
-
-    spark.sparkContext.setLogLevel("ERROR")
-
     // Parse command-line arguments
     val cmdArgs = CommandLineArgs.parse(args) match {
       case Some(parsed) => parsed
@@ -38,27 +24,24 @@ object Main {
     }
 
     // Spark setup and subscription RDD
-    /*
     val spark = SparkSession.builder()
       .appName("RedditNER")
       .master("local[*]")
-      .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .config("spark.kryo.registrationRequired", "false")
-      .config("spark.driver.extraJavaOptions", "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED")
-      .config("spark.executor.extraJavaOptions", "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED")
       .getOrCreate()
-*/
+
     case class FeedResult(success: Boolean, posts: List[Post], filteredPosts: List[Post])
 
     try {
-      // Download and parse feeds locally (avoid Spark serialization issues)
-      val collectedFeedResults = subscriptions.map { subscription =>
+      val sc = spark.sparkContext
+      val subscriptionRdd = sc.parallelize(subscriptions) //crea una RDD
+
+      val feedResults = subscriptionRdd.map { subscription => //crea nuevo RDD (feedResults)
         FileIO.downloadFeed(subscription.url) match {
           case Some(feedJson) =>
             try {
-              val posts = JsonParser.parsePosts(feedJson, subscription.name)
-              val filteredPosts = Analyzer.filterEmptyPosts(posts)
-              FeedResult(success = true, posts = posts, filteredPosts = filteredPosts)
+              val posts = JsonParser.parsePosts(feedJson, subscription.name) //parsea el json
+              val filteredPosts = Analyzer.filterEmptyPosts(posts) // filtra posts vacios
+              FeedResult(success = true, posts = posts, filteredPosts = filteredPosts) // crea objeto nuevo donde guarda posts y posts analizados
             } catch {
               case _: Exception =>
                 println(s"Warning: Failed to parse posts from '${subscription.name}' (${subscription.url})")
@@ -68,7 +51,9 @@ object Main {
             println(s"Warning: Failed to download from '${subscription.name}' (${subscription.url})")
             FeedResult(success = false, posts = List.empty, filteredPosts = List.empty)
         }
-      }
+      }.cache()
+
+      val collectedFeedResults = feedResults.collect().toList
       val allPosts = collectedFeedResults.flatMap(_.posts)
       val filteredPosts = collectedFeedResults.flatMap(_.filteredPosts)
 
@@ -103,34 +88,22 @@ object Main {
       // Load dictionaries
       val dictionary = Dictionary.loadAll(cmdArgs.entitiesDir)
 
-      // Run entity detection and aggregation locally to avoid Spark serialization issues
-      val detectedEntities = filteredPostsList.flatMap { post =>
-        val combinedText = post.title + " " + post.selftext
-        Analyzer.detectEntities(combinedText, dictionary)
+      val results = sc.parallelize(filteredPostsList)
+        .flatMap { post =>
+          val combinedText = post.title + " " + post.selftext
+          Analyzer.detectEntities(combinedText, dictionary)
+        }
+        .map { entity =>
+          ((entity.entityType, entity.text), 1)
+        }
+        .reduceByKey(_ + _)
+        .sortBy({ case ((tipo, nombre), count) => (-count, tipo) })
+        .collect()
+
+      // Mostrar resultados
+      results.foreach { case ((tipo, nombre), count) =>
+        println(s"[$tipo] $nombre: $count apariciones")
       }
-
-      val results = detectedEntities
-        .groupBy(e => (e.entityType, e.text))
-        .map { case (k, list) => (k, list.size) }
-        .toList
-        .sortBy { case ((tipo, nombre), count) => (-count, tipo) }
-        .toArray
-
-      // Mostrar resultados: formato de entidades y estadísticas por tipo
-      val entityCountsMap: Map[(String, String), Int] = results.toMap
-
-      // Print top entities using Formatters
-      println(Formatters.formatEntityStats(entityCountsMap, cmdArgs.topK))
-      println()
-
-      // Compute type stats
-      val typeCounts: Map[String, Int] = results
-        .groupBy { case ((tipo, _), _) => tipo }
-        .map { case (tipo, list) => tipo -> list.map(_._2).sum }
-
-      val totalEntities = typeCounts.values.sum
-      val typeStatsWithTotal = typeCounts + ("total" -> totalEntities)
-      println(Formatters.formatTypeStats(typeStatsWithTotal))
     } finally {
       spark.stop()
     }
