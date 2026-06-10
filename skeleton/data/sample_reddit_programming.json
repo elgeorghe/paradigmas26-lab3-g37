@@ -1,0 +1,36 @@
+{
+  "data": {
+    "children": [
+      {
+        "data": {
+          "title": "Programming career path",
+          "selftext": "Discussion about career paths. Microsoft, Google, and Apple are major employers. Alex Chen is a software engineer."
+        }
+      },
+      {
+        "data": {
+          "title": "Learning algorithms",
+          "selftext": "Algorithm mastery at Stanford. Java and C++ are fundamental. Programming in Tokyo is booming."
+        }
+      },
+      {
+        "data": {
+          "title": "Open source contribution guide",
+          "selftext": "Contributing to GitHub projects. Python is popular. Carnegie Mellon teaches programming."
+        }
+      },
+      {
+        "data": {
+          "title": "Best programming languages",
+          "selftext": "Rust, Go, and Kotlin are trending. Julia Adams contributes to open source in Portland."
+        }
+      },
+      {
+        "data": {
+          "title": "Programming bootcamp review",
+          "selftext": "Bootcamp experience at different locations. JavaScript and React are in demand in Seattle."
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "data": {
+    "children": [
+      {
+        "data": {
+          "title": "Learning Python basics",
+          "selftext": "Python is great for beginners at Harvard University. Michael Brown recommends learning it in Boston."
+        }
+      },
+      {
+        "data": {
+          "title": "Python with NumPy",
+          "selftext": "Using Python and NumPy at Facebook for data analysis. Machine learning is important too."
+        }
+      },
+      {
+        "data": {
+          "title": "Web scraping with Python",
+          "selftext": "Web scraping tutorial using Python at MIT. Companies like Google and Amazon use Python."
+        }
+      },
+      {
+        "data": {
+          "title": "Django vs Flask",
+          "selftext": "Framework comparison for Python developers. Netflix uses Python for their systems."
+        }
+      },
+      {
+        "data": {
+          "title": "Python in Austin tech scene",
+          "selftext": "Python community in Austin, Texas. Sarah Davis is a Python expert in California."
+        }
+      }
+    ]
+  }
+}
