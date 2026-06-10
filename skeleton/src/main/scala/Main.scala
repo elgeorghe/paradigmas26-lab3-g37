@@ -88,19 +88,22 @@ object Main {
       // Load dictionaries
       val dictionary = Dictionary.loadAll(cmdArgs.entitiesDir)
 
-      // Detect entities in all posts (combine title and selftext)
-      val allEntities = filteredPostsList.flatMap { post =>
-        val combinedText = post.title + " " + post.selftext
-        Analyzer.detectEntities(combinedText, dictionary)
+      val results = sc.parallelize(filteredPostsList)
+        .flatMap { post =>
+          val combinedText = post.title + " " + post.selftext
+          Analyzer.detectEntities(combinedText, dictionary)
+        }
+        .map { entity =>
+          ((entity.entityType, entity.text), 1)
+        }
+        .reduceByKey(_ + _)
+        .sortBy({ case ((tipo, nombre), count) => (-count, tipo) })
+        .collect()
+
+      // Mostrar resultados
+      results.foreach { case ((tipo, nombre), count) =>
+        println(s"[$tipo] $nombre: $count apariciones")
       }
-
-      // Count entities
-      val entityCounts = Analyzer.countEntities(allEntities)
-      val typeStats = Analyzer.countByType(allEntities)
-
-      println(Formatters.formatTypeStats(typeStats))
-      println()
-      println(Formatters.formatEntityStats(entityCounts, cmdArgs.topK))
     } finally {
       spark.stop()
     }
