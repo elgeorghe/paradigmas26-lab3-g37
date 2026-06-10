@@ -12,6 +12,9 @@ object Main {
   .master("local[*]")
   .config("spark.ui.showConsoleProgress", "false")
   .getOrCreate()
+
+  spark.sparkContext.setLogLevel("ERROR")
+
   val sc = spark.sparkContext
   
 
