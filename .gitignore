@@ -47,3 +47,4 @@ bin/
 
 # python virtual environment
 venv/
+reddit-mock/

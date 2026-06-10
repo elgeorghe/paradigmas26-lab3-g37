@@ -10,16 +10,22 @@ object JsonParser {
    * @return list of posts, empty list if parsing fails
    */
   def parsePosts(jsonContent: String, subscriptionName: String): List[Post] = {
-    implicit val formats: Formats = DefaultFormats
+    try {
+      implicit val formats: Formats = DefaultFormats
 
-    val json = parse(jsonContent)
-    val children = (json \ "data" \ "children").extract[List[JValue]]
+      val json = parse(jsonContent)
+      val children = (json \ "data" \ "children").extract[List[JValue]]
 
-    children.flatMap { child =>
-      val data = child \ "data"
-      val title = (data \ "title").extract[String]
-      val selftext = (data \ "selftext").extract[String]
-      List(Post(title, selftext))
+      children.flatMap { child =>
+        val data = child \ "data"
+        val title = (data \ "title").extract[String]
+        val selftext = (data \ "selftext").extract[String]
+        List(Post(title, selftext))
+      }
+    } catch {
+      case _: Exception =>
+        println(s"Warning: Failed to parse JSON from '$subscriptionName'")
+        List()
     }
   }
 }
