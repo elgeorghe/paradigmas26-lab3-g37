@@ -33,15 +33,15 @@ object Main {
 
     try {
       val sc = spark.sparkContext
-      val subscriptionRdd = sc.parallelize(subscriptions)
+      val subscriptionRdd = sc.parallelize(subscriptions) //crea una RDD
 
-      val feedResults = subscriptionRdd.map { subscription =>
+      val feedResults = subscriptionRdd.map { subscription => //crea nuevo RDD (feedResults)
         FileIO.downloadFeed(subscription.url) match {
           case Some(feedJson) =>
             try {
-              val posts = JsonParser.parsePosts(feedJson, subscription.name)
-              val filteredPosts = Analyzer.filterEmptyPosts(posts)
-              FeedResult(success = true, posts = posts, filteredPosts = filteredPosts)
+              val posts = JsonParser.parsePosts(feedJson, subscription.name) //parsea el json
+              val filteredPosts = Analyzer.filterEmptyPosts(posts) // filtra posts vacios
+              FeedResult(success = true, posts = posts, filteredPosts = filteredPosts) // crea objeto nuevo donde guarda posts y posts analizados
             } catch {
               case _: Exception =>
                 println(s"Warning: Failed to parse posts from '${subscription.name}' (${subscription.url})")
@@ -66,7 +66,7 @@ object Main {
       val totalChars = filteredPosts.map(post => post.title.length + post.selftext.length).sum
       val avgChars = if (filteredPostsCount > 0) totalChars / filteredPostsCount else 0
 
-      val stats = Map(
+      val stats = Map( //crea un diccionario inmutable
         "feedsSuccess" -> feedsSuccess,
         "feedsFailed" -> feedsFailed,
         "postsSuccess" -> postsSuccess,
