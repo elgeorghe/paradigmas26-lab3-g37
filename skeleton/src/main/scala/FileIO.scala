@@ -52,13 +52,30 @@ object FileIO {
    * @return Option containing JSON as String, None on network error or timeout
    */
   def downloadFeed(url: String): Option[String] = {
-    try {
-      val source = Source.fromURL(url)
-      val content = source.mkString
-      source.close()
-      Some(content)
-    } catch {
-      case _: Exception => None
+  try {
+    val connection = new java.net.URL(url).openConnection()
+
+    connection.setRequestProperty(
+      "User-Agent",
+      "lab3-reddit-client/1.0"
+    )
+
+    connection.setRequestProperty(
+      "Accept",
+      "application/json"
+    )
+
+    val source = Source.fromInputStream(connection.getInputStream)
+
+    val content = source.mkString
+    source.close()
+
+    Some(content)
+
+  } catch {
+    case e: Exception =>
+      println(s"Download error for $url: ${e.getMessage}")
+      None
     }
   }
 
