@@ -1,20 +1,12 @@
 import org.apache.spark.sql.SparkSession
-import org.apache.logging.log4j.{Level, LogManager}
-import org.apache.logging.log4j.core.config.Configurator
-
 
 object Main {
   def main(args: Array[String]): Unit = {
-  Configurator.setRootLevel(Level.ERROR)
 
   val spark = SparkSession.builder()
   .appName("RedditNER")
   .master("local[*]")
-  .config("spark.ui.showConsoleProgress", "false")
   .getOrCreate()
-
-  spark.sparkContext.setLogLevel("ERROR")
-
   val sc = spark.sparkContext
   
 
@@ -82,7 +74,7 @@ object Main {
 
     val postsSuccess = filteredPosts.length
     val postsFailed = downloadsRDD.filter(_._2.isEmpty).count().toInt
-    
+
     // Calculate average characters in filtered posts
     val totalChars = filteredPosts.map(post => post.title.length + post.selftext.length).sum
     val avgChars = if (filteredPosts.nonEmpty) totalChars / filteredPosts.length else 0
@@ -118,18 +110,29 @@ object Main {
     // Load dictionaries
     val dictionary = Dictionary.loadAll(cmdArgs.entitiesDir)
 
-    // Detect entities in all posts (combine title and selftext)
-    val allEntities = filteredPosts.flatMap { post =>
-      val combinedText = post.title + " " + post.selftext
-      Analyzer.detectEntities(combinedText, dictionary)
+    // Broadcast dictionary for use in RDD transformations
+    val dictBroadcast = sc.broadcast(dictionary)
+
+    val results = postsRDD
+      .filter(post => post.title.nonEmpty && post.selftext.nonEmpty)
+      .flatMap { post =>
+        val combinedText = post.title + " " + post.selftext
+        try {
+          Analyzer.detectEntities(combinedText, dictBroadcast.value)
+        } catch {
+          case e: Exception =>
+            println(s"Warning: Failed to detect entities in a post (${e.getMessage})")
+            List.empty[NamedEntity]
+        }
+      }
+      .map { entity => ((entity.entityType, entity.text), 1) }
+      .reduceByKey(_ + _)
+      .sortBy({ case ((tipo, nombre), count) => (-count, tipo) })
+      .collect()
+
+    // Mostrar resultados
+    results.foreach { case ((tipo, nombre), count) =>
+      println(s"[$tipo] $nombre: $count apariciones")
     }
-
-    // Count entities
-    val entityCounts = Analyzer.countEntities(allEntities)
-    val typeStats = Analyzer.countByType(allEntities)
-
-    println(Formatters.formatTypeStats(typeStats))
-    println()
-    println(Formatters.formatEntityStats(entityCounts, cmdArgs.topK))
   }
 }
