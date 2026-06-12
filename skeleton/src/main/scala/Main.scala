@@ -148,10 +148,15 @@ object Main {
     val endTime = System.currentTimeMillis()
     val duration = (endTime - starTime) / 1000.0
     println(s"\nTiempo total de ejecición: ${duration} segundos.")
+    println("Spark UI disponible en http://localhost:4040")
 
     //limpieza final de cache 
     postsRDD.unpersist()
     downloadsRDD.unpersist()
+
+ // while (true) {
+  //Thread.sleep(1000)
+//}
     spark.stop()
   }
 }
