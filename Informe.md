@@ -134,3 +134,35 @@ Cuando se invoca un reduceByKey, el clúster ejecuta una serie de pasos coreogra
 
 - ¿Qué restricciones debe cumplir la función que se le pasa a reduceByKey? Piensen en conmutatividad y asociatividad.
 debe cumplir asociatividad y conmutatividad ya que si la función no cumple con ambas, el resultado del cómputo distribuido será incorrecto o no determinístico
+
+# ejercicio 4 
+
+- El valor de los Accumulators puede ser actualizado durante una tarea, al haber la posibilidad de multiples tareas, no se puede garantizar que el driver haya recibido las actualizaciones al momento de consultar los valores.
+
+- El valor de un Accumulator solo esta disponible para el driver de forma consistente tras ejecutar una accion terminal como .count() o .collect() que fuerza la evaluacion.
+
+- Aunque se esta trabajando sobre una cantidad pequeña de datos, las medidas observadas tienen una diferencia significativa, estos son los valores reportados por Peyretti Marco:
+
+> ~19.271 s sin uso de Spark
+
+> ~6.83 s paralelizando con Spark
+
+> cabe la mencion, la maquina cuenta con DRR5
+
+como se puede ver, la diferencia es notable incluso con un set de datos tan pequeño, por lo cual paralelizar el proceso implica una mejora substancial.
+
+> ![](./imagenes/timeline_jobs.png)
+> ![](./imagenes/timeline_y_accumulator.png)
+# ejercicio 5
+
+- Sin una llamada a cache(), se deberia recomputar el RDD cada vez que es necesario. En nuestro caso los feeds se descargaria 3 veces, primero para verificar si hay posts, segundo para el conteo de entidades y tercero para el calculo de estadisticas por tipo.
+
+- collect() trae los datos presentes en RDD al driver, lo cual implica la perdida de paralelismo ya que no son accesibles para los workers.
+
+- cache() solo marca al RDD para su persistencia, el almacenamiento real ocurre cuando se ejecuta una accion terminal sobre ese RDD
+
+# SOBRE LOS TESTS
+
+> ![](./imagenes/version_java.png)
+
+probado en maquina de Peyretti Marco
